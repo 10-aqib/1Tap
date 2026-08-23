@@ -12,10 +12,10 @@ export interface Room {
 }
 
 export interface RoomItemMetadata {
-  file_name?: string
+  name?: string
   storage_path?: string
-  mime_type?: string
-  file_size?: number
+  type?: string
+  size?: number
   url?: string
   title?: string
   domain?: string

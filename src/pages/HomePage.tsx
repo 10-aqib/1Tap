@@ -1,154 +1,124 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Layout } from '../components/common/Layout'
-import { Button } from '../components/ui/Button'
-import { Input } from '../components/ui/Input'
 import { useRoom } from '../hooks/useRoom'
 import { useToast } from '../components/ui/ToastProvider'
-import { ArrowRight, Share2, Smartphone, Zap } from 'lucide-react'
+import { Button } from '../components/ui/Button'
+import { CodeInput } from '../components/ui/CodeInput'
+import { triggerBackgroundPulse } from '../components/background/LivingBackground'
+import { Moon, Sun, ArrowRight, Zap } from 'lucide-react'
 
 export function HomePage() {
-  const [joinCode, setJoinCode] = useState('')
-  const [expiry, setExpiry] = useState<number>(30)
-  const { createRoom, joinRoomByCode, loading } = useRoom()
   const navigate = useNavigate()
+  const { createRoom, joinRoomByCode, loading } = useRoom()
   const { toast } = useToast()
+  
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
 
-  const handleCreate = async () => {
-    const room = await createRoom(expiry)
+  const toggleTheme = () => {
+    const root = document.documentElement
+    if (isDark) {
+      root.classList.remove('dark')
+    } else {
+      root.classList.add('dark')
+    }
+    setIsDark(!isDark)
+  }
+
+  const handleCreateRoom = async () => {
+    const room = await createRoom(60) // default 1 hour
     if (room) {
-      toast('Room created successfully', 'success')
+      triggerBackgroundPulse()
       navigate(`/room/${room.id}`)
     } else {
-      toast('Failed to create room. Try again.', 'error')
+      toast('Failed to create space. Please try again.', 'error')
     }
   }
 
-  const handleJoin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (joinCode.length !== 6 || !/^\d+$/.test(joinCode)) {
-      toast('Please enter a valid 6-digit code', 'error')
-      return
-    }
-
-    const room = await joinRoomByCode(joinCode)
+  const handleJoin = async (code: string) => {
+    if (code.length !== 6) return
+    const room = await joinRoomByCode(code)
     if (room) {
+      triggerBackgroundPulse()
       navigate(`/room/${room.id}`)
     } else {
-      toast('Room not found or expired', 'error')
+      toast('Invalid or expired code.', 'error')
     }
   }
 
   return (
-    <Layout>
-      <div className="flex-1 flex flex-col items-center justify-center py-12 md:py-24">
-        {/* Hero Section */}
-        <div className="text-center max-w-3xl mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 text-sm font-medium mb-6">
-            <Zap className="w-4 h-4" />
-            <span>Instant cross-device sharing</span>
+    <div className="min-h-screen flex flex-col relative overflow-hidden bg-bg transition-colors duration-300">
+      {/* Abstract Background Elements */}
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-accent-500/5 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-accent-500/5 blur-[120px] pointer-events-none" />
+
+      {/* Navbar */}
+      <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-7xl w-full mx-auto">
+        <div className="flex items-center gap-2 text-text-primary font-bold text-xl tracking-tight">
+          <div className="w-8 h-8 rounded-lg bg-accent-600 flex items-center justify-center text-white">
+            <Zap className="w-5 h-5 fill-white" />
           </div>
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white mb-6">
-            Move anything between your devices. <span className="text-indigo-600 dark:text-indigo-400">Instantly.</span>
-          </h1>
-          <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 mb-8 max-w-2xl mx-auto">
-            Create a temporary room and share text, links, and files with any device. No accounts required.
-          </p>
+          DropShare
         </div>
+        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme" className="rounded-full">
+          {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </Button>
+      </nav>
 
-        {/* Action Cards */}
-        <div className="grid md:grid-cols-2 gap-6 w-full max-w-4xl">
-          {/* Create Room Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center transition-all hover:shadow-md">
-            <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-6">
-              <Share2 className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-bold mb-2">Create a Room</h2>
-            <p className="text-slate-500 dark:text-slate-400 mb-6 flex-1">
-              Start a new secure sharing session.
-            </p>
-            
-            <div className="w-full flex flex-col gap-4">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Room expires in:</span>
-                <select 
-                  className="bg-transparent text-sm font-medium focus:outline-none cursor-pointer"
-                  value={expiry}
-                  onChange={(e) => setExpiry(Number(e.target.value))}
-                >
-                  <option value={15}>15 minutes</option>
-                  <option value={30}>30 minutes</option>
-                  <option value={60}>1 hour</option>
-                  <option value={1440}>24 hours</option>
-                </select>
-              </div>
-              <Button 
-                onClick={handleCreate} 
-                isLoading={loading} 
-                size="lg" 
-                className="w-full"
-              >
-                Create Room
-              </Button>
-            </div>
+      {/* Hero Section */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-4xl mx-auto text-center">
+        
+        {/* Animated Connection Visual */}
+        <div className="mb-12 flex items-center gap-4 text-text-muted">
+          <div className="w-12 h-16 rounded-xl border-2 border-surface-border flex items-center justify-center relative overflow-hidden bg-surface shadow-sm">
+            <div className="absolute bottom-2 w-4 h-1 rounded-full bg-surface-border" />
           </div>
-
-          {/* Join Room Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center transition-all hover:shadow-md">
-            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/50 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-6">
-              <Smartphone className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-bold mb-2">Join a Room</h2>
-            <p className="text-slate-500 dark:text-slate-400 mb-6 flex-1">
-              Enter a 6-digit code to connect.
-            </p>
-            
-            <form onSubmit={handleJoin} className="w-full flex flex-col gap-4">
-              <Input
-                type="text"
-                placeholder="Enter 6-digit code"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="text-center text-2xl tracking-[0.2em] font-mono h-14"
-                maxLength={6}
-                inputMode="numeric"
-              />
-              <Button 
-                type="submit" 
-                variant="secondary" 
-                size="lg" 
-                className="w-full"
-                disabled={joinCode.length !== 6 || loading}
-              >
-                Join Room
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </form>
+          <div className="relative w-24 h-px bg-surface-border">
+            <div className="absolute top-1/2 left-0 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-accent-500 animate-[progress-shimmer_1.5s_ease-in-out_infinite]" />
+          </div>
+          <div className="w-16 h-12 rounded-xl border-2 border-surface-border flex items-center justify-center relative bg-surface shadow-sm">
+            <div className="absolute bottom-0 w-8 h-1 rounded-t-full bg-surface-border" />
           </div>
         </div>
 
-        {/* How it works */}
-        <div className="mt-24 w-full max-w-4xl">
-          <h3 className="text-center text-lg font-semibold text-slate-400 mb-8 uppercase tracking-wider">How it works</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            <div className="flex flex-col items-center">
-              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold mb-4">1</div>
-              <h4 className="font-semibold mb-2">Create a Room</h4>
-              <p className="text-sm text-slate-500">Get a secure code and link instantly.</p>
+        <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight text-text-primary mb-6 animate-slide-up-fade" style={{ animationDelay: '0.1s' }}>
+          Send it. <br className="sm:hidden" />
+          <span className="text-accent-600">See it there.</span>
+        </h1>
+        
+        <p className="text-lg sm:text-xl text-text-secondary max-w-xl mb-12 animate-slide-up-fade" style={{ animationDelay: '0.2s' }}>
+          Create a temporary space between your devices in seconds. No accounts, no friction.
+        </p>
+
+        <div className="w-full max-w-sm flex flex-col gap-8 animate-slide-up-fade" style={{ animationDelay: '0.3s' }}>
+          <Button 
+            size="lg" 
+            className="w-full text-lg h-14 rounded-2xl group" 
+            onClick={handleCreateRoom}
+            isLoading={loading}
+          >
+            Create a Space
+            <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+          </Button>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-surface-border" />
             </div>
-            <div className="flex flex-col items-center">
-              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold mb-4">2</div>
-              <h4 className="font-semibold mb-2">Scan or Enter Code</h4>
-              <p className="text-sm text-slate-500">Open DropShare on any other device.</p>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold mb-4">3</div>
-              <h4 className="font-semibold mb-2">Share Instantly</h4>
-              <p className="text-sm text-slate-500">Text, links, and files sync in real-time.</p>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-bg text-text-muted">or join with a code</span>
             </div>
           </div>
+
+          <div className="pt-2">
+            <CodeInput onComplete={handleJoin} disabled={loading} />
+          </div>
         </div>
-      </div>
-    </Layout>
+      </main>
+      
+      {/* Footer */}
+      <footer className="relative z-10 py-6 text-center text-sm text-text-muted">
+        End-to-end encrypted locally. Files deleted automatically.
+      </footer>
+    </div>
   )
 }

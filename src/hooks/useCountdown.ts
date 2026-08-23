@@ -55,6 +55,7 @@ export const useCountdown = (expiresAt: string | undefined) => {
     timeLeft,
     isExpired,
     formattedTime: formatTime(timeLeft),
-    isWarning: timeLeft !== null && timeLeft <= 300 && !isExpired // Less than 5 mins
+    isWarning: timeLeft !== null && timeLeft <= 300 && !isExpired, // Less than 5 mins
+    isCritical: timeLeft !== null && timeLeft <= 60 && !isExpired // Less than 1 min
   }
 }

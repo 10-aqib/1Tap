@@ -1,18 +1,15 @@
-import { useEffect, useState, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { Layout } from '../components/common/Layout'
-import { Button } from '../components/ui/Button'
 import { useRoom } from '../hooks/useRoom'
 import { useRoomRealtime } from '../hooks/useRoomRealtime'
-import { useCountdown } from '../hooks/useCountdown'
 import { useFileUpload } from '../hooks/useFileUpload'
+import { useCountdown } from '../hooks/useCountdown'
 import { useToast } from '../components/ui/ToastProvider'
-import { formatBytes } from '../lib/utils'
-import { 
-  Copy, Link as LinkIcon, FileText, Download, 
-  Send, Upload, Users, LogOut, Share2
-} from 'lucide-react'
+import { Button } from '../components/ui/Button'
+import { MessageItem } from '../components/MessageItem'
+import { triggerBackgroundPulse } from '../components/background/LivingBackground'
+import { Moon, Sun, Copy, Share2, LogOut, Paperclip, Send, AlertCircle, Zap, MonitorSmartphone, X, Check, Download } from 'lucide-react'
 
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -22,11 +19,23 @@ export function RoomPage() {
   const { getRoomById, loading, sessionId } = useRoom()
   const [room, setRoom] = useState<any>(null)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
   
   const { items, devices, sendItem } = useRoomRealtime(room?.id, sessionId)
   const [textInput, setTextInput] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const { uploadFiles, uploading, progress, error: uploadError } = useFileUpload(
+    room?.id, 
+    sessionId,
+    (url, metadata) => {
+      sendItem('file', url, metadata)
+      triggerBackgroundPulse()
+    }
+  )
 
   useEffect(() => {
     if (!roomId) return
@@ -43,45 +52,52 @@ export function RoomPage() {
     fetchRoom()
   }, [roomId, navigate, getRoomById])
 
-  const { isExpired, formattedTime, isWarning } = useCountdown(room?.expires_at)
-
-  useEffect(() => {
-    if (isExpired) {
-      navigate('/expired')
-    }
-  }, [isExpired, navigate])
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [items])
-
-  const { uploadFile, uploading, progress, error: uploadError } = useFileUpload(
-    room?.id, 
-    sessionId,
-    (_url, metadata) => {
-      sendItem('file', 'File uploaded', metadata)
-      toast('File uploaded successfully', 'success')
-    }
-  )
-
   useEffect(() => {
     if (uploadError) {
       toast(uploadError, 'error')
     }
   }, [uploadError, toast])
 
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+    // Pulse slightly when receiving new items
+    if (items.length > 0) {
+      triggerBackgroundPulse()
+    }
+  }, [items])
+
+  const { isExpired, formattedTime, isWarning, isCritical } = useCountdown(room?.expires_at)
+
+  useEffect(() => {
+    if (isExpired && room?.status === 'active') {
+      toast('This space has expired.', 'error')
+      navigate('/expired')
+    }
+  }, [isExpired, room?.status, navigate, toast])
+
+  const toggleTheme = () => {
+    const root = document.documentElement
+    if (isDark) root.classList.remove('dark')
+    else root.classList.add('dark')
+    setIsDark(!isDark)
+  }
+
+  const handleCopyCode = () => {
+    if (!room?.join_code) return
+    navigator.clipboard.writeText(room.join_code)
+    setCodeCopied(true)
+    setTimeout(() => setCodeCopied(false), 2000)
+    toast('Code copied to clipboard', 'success')
+  }
+
   const handleSendText = () => {
     if (!textInput.trim()) return
-    
-    // Check if it's a link
-    const isLink = /^(https?:\/\/)?([\w\d-]+\.)+\w{2,}(\/.+)?$/.test(textInput.trim())
-    
-    sendItem(isLink ? 'link' : 'text', textInput.trim(), isLink ? { url: textInput.trim() } : null)
+    const isUrl = /^(https?:\/\/[^\s]+)/.test(textInput.trim())
+    sendItem(isUrl ? 'link' : 'text', textInput.trim())
     setTextInput('')
+    triggerBackgroundPulse()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -91,288 +107,256 @@ export function RoomPage() {
     }
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast('Copied!', 'success')
+  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      uploadFiles(files)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
+
+  // Drag and drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!isDragging) setIsDragging(true)
+  }, [isDragging])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files)
+      uploadFiles(files)
+    }
+  }, [uploadFiles])
 
   if (loading || !room) {
     return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-        </div>
-      </Layout>
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <div className="w-8 h-8 border-4 border-surface-border border-t-accent-600 rounded-full animate-spin" />
+      </div>
     )
   }
 
-  const shareUrl = `${window.location.origin}/room/${room.id}`
+  const shareUrl = window.location.href
 
   return (
-    <Layout>
-      <div className="flex flex-col h-[calc(100vh-4rem)] md:h-[calc(100vh-6rem)] gap-4 md:gap-6">
-        {/* Header */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div>
-              <div className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Room Code</div>
-              <div className="flex items-center gap-2">
-                <span className="text-3xl font-mono font-bold tracking-widest text-indigo-600 dark:text-indigo-400">
-                  {room.join_code}
-                </span>
-                <button 
-                  onClick={() => copyToClipboard(room.join_code)}
-                  className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                >
-                  <Copy className="w-5 h-5" />
-                </button>
+    <div 
+      className="min-h-screen flex flex-col bg-bg text-text-primary transition-colors duration-300"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Full Screen Drop Zone */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 bg-accent-600/90 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-200">
+          <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center mb-6 animate-pulse">
+            <Download className="w-10 h-10" />
+          </div>
+          <h2 className="text-4xl font-bold tracking-tight">Drop file to share</h2>
+          <p className="text-accent-100 mt-2 text-lg">It will instantly upload to this space</p>
+        </div>
+      )}
+
+      {/* Top Bar */}
+      <header className="sticky top-0 z-30 bg-bg/80 backdrop-blur-md border-b border-surface-border">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+          
+          {/* Logo & Code */}
+          <div className="flex items-center gap-4 sm:gap-6">
+            <div className="hidden sm:flex items-center gap-2 font-bold text-lg tracking-tight cursor-pointer" onClick={() => navigate('/')}>
+              <div className="w-7 h-7 rounded-lg bg-accent-600 flex items-center justify-center text-white">
+                <Zap className="w-4 h-4 fill-white" />
               </div>
+              DropShare
+            </div>
+            <button 
+              onClick={handleCopyCode}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-hover hover:bg-surface-border transition-colors group"
+            >
+              <span className="font-mono font-bold text-lg tracking-widest text-text-primary">
+                {room.join_code.slice(0, 3)} {room.join_code.slice(3)}
+              </span>
+              {codeCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-text-muted group-hover:text-text-primary transition-colors" />}
+            </button>
+          </div>
+
+          {/* Center: Timer & Status */}
+          <div className="hidden md:flex items-center gap-3">
+            <div className={`px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-2 transition-colors ${
+              isCritical ? 'bg-red-50 text-red-600 dark:bg-red-950/40' : 
+              isWarning ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40' : 
+              'bg-surface-hover text-text-secondary'
+            }`}>
+              <AlertCircle className="w-4 h-4" />
+              {formattedTime} remaining
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-hover text-text-secondary text-sm font-medium">
+              <span className="relative flex h-2.5 w-2.5 mr-1">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+              </span>
+              {devices.length} {devices.length === 1 ? 'device' : 'devices'}
             </div>
           </div>
-          
-          <div className="flex items-center gap-4 md:gap-8">
-            <div className="flex flex-col items-end">
-              <div className="text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                Active
-              </div>
-              <div className={`font-mono font-bold ${isWarning ? 'text-red-500' : 'text-slate-700 dark:text-slate-300'}`}>
-                {formattedTime}
-              </div>
-            </div>
 
-            <div className="hidden md:flex flex-col items-end">
-              <div className="text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
-                <Users className="w-3 h-3" />
-                Connected ({devices.length})
-              </div>
-              <div className="flex -space-x-2">
-                {devices.slice(0, 3).map((d, i) => (
-                  <div key={d.id} className="w-6 h-6 rounded-full bg-indigo-100 border-2 border-white dark:border-slate-900 flex items-center justify-center text-[10px] font-bold text-indigo-600" title={d.label}>
-                    {d.isYou ? 'Y' : i+1}
-                  </div>
-                ))}
-                {devices.length > 3 && (
-                  <div className="w-6 h-6 rounded-full bg-slate-100 border-2 border-white dark:border-slate-900 flex items-center justify-center text-[10px] font-bold text-slate-600">
-                    +{devices.length - 3}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={() => setShowShareModal(true)} title="Share Room">
-                <Share2 className="w-5 h-5" />
-              </Button>
-              <Button variant="danger" size="icon" onClick={() => navigate('/')} title="Leave Room">
-                <LogOut className="w-5 h-5" />
-              </Button>
-            </div>
+          {/* Right Controls */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setShowShareModal(true)} title="Share Room">
+              <Share2 className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={toggleTheme} className="hidden sm:flex">
+              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => navigate('/')} title="Leave Space" className="text-text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30">
+              <LogOut className="w-5 h-5" />
+            </Button>
           </div>
         </div>
+        
+        {/* Mobile Timer Bar */}
+        <div className="md:hidden flex items-center justify-between px-4 py-2 border-t border-surface-border bg-surface-muted text-xs font-medium">
+          <div className={`flex items-center gap-1.5 ${isCritical ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-text-secondary'}`}>
+            <AlertCircle className="w-3.5 h-3.5" />
+            {formattedTime}
+          </div>
+          <div className="flex items-center gap-1.5 text-text-secondary">
+            <MonitorSmartphone className="w-3.5 h-3.5" />
+            {devices.length} connected
+          </div>
+        </div>
+      </header>
 
-        {/* Mobile Share Modal */}
-        {showShareModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-xl border border-slate-100 dark:border-slate-800 text-center max-w-sm w-full">
-              <h3 className="font-semibold mb-4 text-slate-700 dark:text-slate-300">Share Room</h3>
-              <div className="bg-white p-4 rounded-xl inline-block mx-auto border border-slate-100 shadow-sm mb-4">
-                <QRCodeSVG value={shareUrl} size={200} />
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto p-4 sm:p-6 overflow-hidden">
+        
+        {/* Feed Area */}
+        <div 
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto mb-6 pr-2 space-y-6"
+        >
+          {items.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center animate-in fade-in zoom-in-95 duration-500">
+              <div className="w-16 h-16 rounded-2xl bg-surface-hover flex items-center justify-center text-text-muted mb-4 shadow-sm">
+                <Paperclip className="w-8 h-8" />
               </div>
-              <p className="text-xs text-slate-500 mb-6">
-                Scan this QR code to instantly join this room.
+              <h3 className="text-xl font-semibold text-text-primary mb-2">Nothing here yet</h3>
+              <p className="text-text-secondary max-w-sm">
+                Drop a file anywhere, paste a link, or type a message below to instantly share it with connected devices.
               </p>
-              <div className="flex flex-col gap-3">
-                <Button onClick={() => copyToClipboard(shareUrl)} variant="secondary" className="w-full">
-                  Copy Room Link
-                </Button>
-                <Button onClick={() => setShowShareModal(false)} variant="ghost" className="w-full">
-                  Close
-                </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {items.map(item => (
+                <MessageItem key={item.id} item={item} isOwn={item.session_id === sessionId} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Upload Progress (Inline) */}
+        {uploading && (
+          <div className="mb-4 bg-surface border border-surface-border rounded-xl p-3 flex items-center gap-3 shadow-sm animate-slide-up-fade">
+            <div className="w-8 h-8 rounded-lg bg-accent-100 dark:bg-accent-900/50 flex items-center justify-center">
+              <div className="w-4 h-4 border-2 border-accent-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+            <div className="flex-1">
+              <div className="flex justify-between text-xs mb-1 font-medium">
+                <span>Uploading...</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-surface-hover rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-accent-600 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
             </div>
           </div>
         )}
 
-        <div className="flex flex-1 gap-4 md:gap-6 min-h-0 overflow-hidden">
-          {/* Main Chat Area */}
-          <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+        {/* Unified Composer */}
+        <div className="relative bg-surface rounded-2xl shadow-sm border border-surface-border p-2 focus-within:ring-2 focus-within:ring-[var(--ring)] focus-within:border-accent-500 transition-all">
+          <textarea
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message, paste a link..."
+            className="w-full bg-transparent resize-none outline-none text-text-primary placeholder:text-text-muted p-2 max-h-32 min-h-[44px]"
+            rows={1}
+            style={{ height: textInput ? 'auto' : '44px' }}
+          />
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-surface-hover">
+            <input
+              type="file"
+              multiple
+              ref={fileInputRef}
+              className="hidden"
+              onChange={onFileSelect}
+            />
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-text-muted hover:text-text-primary rounded-lg"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip className="w-4 h-4 mr-2" />
+              Attach File
+            </Button>
             
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-              {items.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                  <Share2 className="w-12 h-12 mb-4 opacity-20" />
-                  <p>Nothing shared yet.</p>
-                  <p className="text-sm">Send a message, link, or file to get started.</p>
-                </div>
-              ) : (
-                items.map((item) => {
-                  const isMine = item.session_id === sessionId
-                  const time = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  
-                  return (
-                    <div key={item.id} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
-                      <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-4 ${
-                        isMine 
-                          ? 'bg-indigo-600 text-white rounded-br-none' 
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-bl-none'
-                      }`}>
-                        
-                        {item.type === 'text' && (
-                          <div className="whitespace-pre-wrap break-words">{item.content}</div>
-                        )}
-
-                        {item.type === 'link' && (
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-black/10 rounded-lg">
-                              <LinkIcon className="w-5 h-5" />
-                            </div>
-                            <div className="flex-1 truncate">
-                              <a 
-                                href={item.content.startsWith('http') ? item.content : `https://${item.content}`}
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="underline decoration-white/30 hover:decoration-white transition-all break-all"
-                              >
-                                {item.content}
-                              </a>
-                            </div>
-                          </div>
-                        )}
-
-                        {item.type === 'file' && item.metadata && (
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-black/10 rounded-lg">
-                              <FileText className="w-5 h-5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium truncate">{item.metadata.file_name}</div>
-                              <div className="text-xs opacity-70">{formatBytes(item.metadata.file_size || 0)}</div>
-                            </div>
-                            <a 
-                              href={item.metadata.url} 
-                              download={item.metadata.file_name}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ml-2 p-2 bg-black/10 rounded-full hover:bg-black/20 transition-colors"
-                            >
-                              <Download className="w-4 h-4" />
-                            </a>
-                          </div>
-                        )}
-
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
-                        <span>{time}</span>
-                        {!isMine && <span>• Device</span>}
-                        {item.type !== 'file' && (
-                           <button onClick={() => copyToClipboard(item.content)} className="hover:text-slate-600">Copy</button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input Area */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
-              
-              {uploading && (
-                <div className="mb-4 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-3">
-                  <div className="animate-spin text-indigo-600"><Upload className="w-5 h-5" /></div>
-                  <div className="flex-1">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>Uploading file...</span>
-                      <span>{progress}%</span>
-                    </div>
-                    <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-indigo-600 transition-all duration-300"
-                        style={{ width: `${progress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-end gap-2">
-                <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-1 flex items-end shadow-sm">
-                  <textarea
-                    value={textInput}
-                    onChange={(e) => setTextInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Type a message or paste a link..."
-                    className="flex-1 bg-transparent border-0 focus:ring-0 resize-none max-h-32 min-h-[44px] py-3 px-4 text-sm"
-                    rows={1}
-                  />
-                  
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        uploadFile(e.target.files[0])
-                        e.target.value = ''
-                      }
-                    }} 
-                  />
-                  
-                  <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                    className="p-3 text-slate-400 hover:text-indigo-600 disabled:opacity-50 transition-colors"
-                  >
-                    <Upload className="w-5 h-5" />
-                  </button>
-                </div>
-                
-                <Button 
-                  onClick={handleSendText}
-                  disabled={!textInput.trim() || uploading}
-                  className="h-[52px] w-[52px] shrink-0 rounded-2xl"
-                >
-                  <Send className="w-5 h-5" />
-                </Button>
-              </div>
-              <div className="text-center mt-2 text-[10px] text-slate-400">
-                Press <kbd className="px-1 border rounded bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">Enter</kbd> to send, <kbd className="px-1 border rounded bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">Shift</kbd> + <kbd className="px-1 border rounded bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">Enter</kbd> for new line
-              </div>
-            </div>
+            <Button 
+              size="sm" 
+              className="rounded-lg px-4"
+              onClick={handleSendText}
+              disabled={!textInput.trim() || uploading}
+            >
+              <Send className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Send</span>
+            </Button>
           </div>
+        </div>
+      </main>
 
-          {/* Sidebar / QR Code */}
-          <div className="hidden lg:flex flex-col w-80 gap-6">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 text-center">
-              <h3 className="font-semibold mb-4 text-slate-700 dark:text-slate-300">Scan to Join</h3>
-              <div className="bg-white p-4 rounded-xl inline-block mx-auto border border-slate-100 shadow-sm mb-4">
-                <QRCodeSVG value={shareUrl} size={160} />
-              </div>
-              <p className="text-xs text-slate-500">
-                Point your phone's camera at this QR code to instantly join this room.
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface rounded-3xl p-6 sm:p-8 shadow-2xl border border-surface-border max-w-sm w-full relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setShowShareModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            
+            <div className="text-center mb-6 mt-2">
+              <h3 className="text-xl font-bold text-text-primary mb-1">Scan to Join</h3>
+              <p className="text-sm text-text-secondary">
+                Open DropShare on another device and scan this code or enter <span className="font-mono font-bold text-text-primary bg-surface-hover px-1 py-0.5 rounded">{room.join_code}</span>
               </p>
             </div>
             
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
-              <h3 className="font-semibold mb-4 text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                Connected Devices
-              </h3>
-              <ul className="space-y-3">
-                {devices.map(device => (
-                  <li key={device.id} className="flex items-center gap-3 text-sm">
-                    <span className={`w-2 h-2 rounded-full ${device.isYou ? 'bg-indigo-500' : 'bg-green-500'}`}></span>
-                    <span className={device.isYou ? 'font-semibold' : ''}>{device.label}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="bg-white p-4 rounded-2xl inline-block mx-auto border border-zinc-100 shadow-sm mb-6 w-full aspect-square flex items-center justify-center">
+              <QRCodeSVG value={shareUrl} size={200} className="w-full h-full max-w-[200px]" />
             </div>
+            
+            <Button onClick={() => {
+              navigator.clipboard.writeText(shareUrl)
+              toast('Link copied!', 'success')
+            }} variant="primary" className="w-full h-12 text-base rounded-xl">
+              Copy Room Link
+            </Button>
           </div>
         </div>
-      </div>
-    </Layout>
+      )}
+    </div>
   )
 }
