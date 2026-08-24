@@ -40,9 +40,8 @@ export function MessageItem({ item, isOwn }: MessageItemProps) {
             </p>
           </div>
           <a
-            href={item.content}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={`${item.content}?download=`}
+            download={item.metadata.name}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-hover hover:bg-surface-border text-text-secondary transition-colors"
             title="Download file"
           >
@@ -99,13 +98,22 @@ export function MessageItem({ item, isOwn }: MessageItemProps) {
 
   // Text
   return (
-    <div className={`flex w-full ${isOwn ? 'justify-end' : 'justify-start'} animate-slide-up-fade`}>
+    <div className={`flex w-full group ${isOwn ? 'justify-end' : 'justify-start'} animate-slide-up-fade`}>
       <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-3 shadow-sm ${
         isOwn ? 'bg-accent-600 text-white rounded-br-sm' : 'bg-surface border border-surface-border text-text-primary rounded-bl-sm'
       }`}>
         <p className="text-sm whitespace-pre-wrap break-words">{item.content}</p>
-        <div className={`text-[10px] mt-1.5 flex justify-end ${isOwn ? 'text-accent-100/70' : 'text-text-muted'}`}>
-          {timeString}
+        <div className={`text-[10px] mt-1.5 flex items-center justify-end gap-1.5 ${isOwn ? 'text-accent-100/70' : 'text-text-muted'}`}>
+          <span>{timeString}</span>
+          <button
+            onClick={() => handleCopy(item.content)}
+            className={`hover:opacity-100 transition-opacity flex items-center justify-center w-5 h-5 rounded-md ${
+              isOwn ? 'text-accent-100 hover:text-white hover:bg-accent-500/50' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'
+            }`}
+            title="Copy text"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3 h-3" />}
+          </button>
         </div>
       </div>
     </div>

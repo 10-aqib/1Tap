@@ -57,7 +57,7 @@ export function HomePage() {
           <div className="w-8 h-8 rounded-lg bg-accent-600 flex items-center justify-center text-white">
             <Zap className="w-5 h-5 fill-white" />
           </div>
-          DropShare
+          1Tap
         </div>
         <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme" className="rounded-full">
           {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -81,8 +81,8 @@ export function HomePage() {
         </div>
 
         <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight text-text-primary mb-6 animate-slide-up-fade" style={{ animationDelay: '0.1s' }}>
-          Send it. <br className="sm:hidden" />
-          <span className="text-accent-600">See it there.</span>
+          Move anything. <br className="sm:hidden" />
+          <span className="text-accent-600">Anywhere nearby.</span>
         </h1>
         
         <p className="text-lg sm:text-xl text-text-secondary max-w-xl mb-12 animate-slide-up-fade" style={{ animationDelay: '0.2s' }}>

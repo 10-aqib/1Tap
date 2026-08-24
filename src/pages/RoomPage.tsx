@@ -177,7 +177,7 @@ export function RoomPage() {
               <div className="w-7 h-7 rounded-lg bg-accent-600 flex items-center justify-center text-white">
                 <Zap className="w-4 h-4 fill-white" />
               </div>
-              DropShare
+              1Tap
             </div>
             <button 
               onClick={handleCopyCode}
@@ -340,7 +340,7 @@ export function RoomPage() {
             <div className="text-center mb-6 mt-2">
               <h3 className="text-xl font-bold text-text-primary mb-1">Scan to Join</h3>
               <p className="text-sm text-text-secondary">
-                Open DropShare on another device and scan this code or enter <span className="font-mono font-bold text-text-primary bg-surface-hover px-1 py-0.5 rounded">{room.join_code}</span>
+                Open 1Tap on another device and scan this code or enter <span className="font-mono font-bold text-text-primary bg-surface-hover px-1 py-0.5 rounded">{room.join_code}</span>
               </p>
             </div>
             

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 
@@ -23,13 +23,13 @@ export const useToast = () => {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
-  const toast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const toast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = crypto.randomUUID()
     setToasts(prev => [...prev, { id, message, type }])
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
     }, 4000)
-  }
+  }, [])
 
   return (
     <ToastContext.Provider value={{ toast }}>

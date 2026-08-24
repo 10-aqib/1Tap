@@ -17,13 +17,15 @@ export const useFileUpload = (roomId: string | undefined, _sessionId: string, on
     }
 
     if (files.length > MAX_FILES) {
-      setError(`You can only upload up to ${MAX_FILES} files at a time.`)
+      setError(`You can only send up to ${MAX_FILES} files at once.`)
+      setTimeout(() => setError(null), 100)
       return
     }
 
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
-        setError(`File "${file.name}" exceeds the 5 MB limit.`)
+        setError(`File "${file.name}" is too large (max 5MB)`)
+        setTimeout(() => setError(null), 100)
         return
       }
     }

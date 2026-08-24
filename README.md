@@ -1,8 +1,8 @@
-# DropShare
+# 1Tap
 
-**Share instantly. No accounts. No friction.**
+**Share instantly. No accounts.**
 
-DropShare is an instant cross-device sharing application that allows users to temporarily connect devices and share text, links, and files without creating an account.
+1Tap is an instant cross-device sharing application that allows users to temporarily connect devices and share text, links, and files without creating an account.
 
 ## Features
 
