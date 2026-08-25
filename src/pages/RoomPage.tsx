@@ -9,7 +9,7 @@ import { useToast } from '../components/ui/ToastProvider'
 import { Button } from '../components/ui/Button'
 import { MessageItem } from '../components/MessageItem'
 import { triggerBackgroundPulse } from '../components/background/LivingBackground'
-import { Moon, Sun, Copy, Share2, LogOut, Paperclip, Send, AlertCircle, Zap, MonitorSmartphone, X, Check, Download } from 'lucide-react'
+import { Moon, Sun, Copy, Share2, LogOut, Paperclip, Send, AlertCircle, Zap, MonitorSmartphone, X, Check, Download, Trash2 } from 'lucide-react'
 
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -22,7 +22,7 @@ export function RoomPage() {
   const [codeCopied, setCodeCopied] = useState(false)
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
   
-  const { items, devices, sendItem } = useRoomRealtime(room?.id, sessionId)
+  const { items, devices, sendItem, updateItem, deleteItem, clearAllItems } = useRoomRealtime(room?.id, sessionId)
   const [textInput, setTextInput] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -90,6 +90,17 @@ export function RoomPage() {
     setCodeCopied(true)
     setTimeout(() => setCodeCopied(false), 2000)
     toast('Code copied to clipboard', 'success')
+  }
+
+  const handleClearAll = async () => {
+    if (confirm('Are you sure you want to clear all messages you sent in this space?')) {
+      try {
+        await clearAllItems()
+        toast('Your messages were cleared', 'success')
+      } catch (e) {
+        toast('Failed to clear messages', 'error')
+      }
+    }
   }
 
   const handleSendText = () => {
@@ -211,6 +222,9 @@ export function RoomPage() {
 
           {/* Right Controls */}
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={handleClearAll} title="Clear My Messages" className="text-text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30">
+              <Trash2 className="w-5 h-5" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => setShowShareModal(true)} title="Share Room">
               <Share2 className="w-5 h-5" />
             </Button>
@@ -257,7 +271,13 @@ export function RoomPage() {
           ) : (
             <div className="flex flex-col gap-4">
               {items.map(item => (
-                <MessageItem key={item.id} item={item} isOwn={item.session_id === sessionId} />
+                <MessageItem 
+                  key={item.id} 
+                  item={item} 
+                  isOwn={item.session_id === sessionId}
+                  onUpdate={updateItem}
+                  onDelete={deleteItem}
+                />
               ))}
             </div>
           )}

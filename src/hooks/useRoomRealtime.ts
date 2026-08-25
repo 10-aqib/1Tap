@@ -54,6 +54,18 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
           setItems((current) => current.filter(item => item.id !== payload.old.id))
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'room_items',
+          filter: `room_id=eq.${roomId}`
+        },
+        (payload) => {
+          setItems((current) => current.map(item => item.id === payload.new.id ? payload.new as RoomItem : item))
+        }
+      )
 
     // Setup presence
     channel
@@ -120,9 +132,54 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
       .eq('id', roomId)
   }
 
+  const updateItem = async (id: string, newContent: string) => {
+    if (!roomId) return
+    const { error } = await supabase
+      .from('room_items')
+      .update({ content: newContent })
+      .eq('id', id)
+      .eq('session_id', sessionId) // extra safety check
+    
+    if (error) {
+      console.error('Error updating item:', error)
+      throw error
+    }
+  }
+
+  const deleteItem = async (id: string) => {
+    if (!roomId) return
+    const { error } = await supabase
+      .from('room_items')
+      .delete()
+      .eq('id', id)
+      .eq('session_id', sessionId)
+      
+    if (error) {
+      console.error('Error deleting item:', error)
+      throw error
+    }
+  }
+
+  const clearAllItems = async () => {
+    if (!roomId) return
+    const { error } = await supabase
+      .from('room_items')
+      .delete()
+      .eq('room_id', roomId)
+      .eq('session_id', sessionId)
+      
+    if (error) {
+      console.error('Error clearing items:', error)
+      throw error
+    }
+  }
+
   return {
     items,
     devices,
-    sendItem
+    sendItem,
+    updateItem,
+    deleteItem,
+    clearAllItems
   }
 }
