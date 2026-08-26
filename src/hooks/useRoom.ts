@@ -124,10 +124,42 @@ export const useRoom = () => {
     }
   }, [])
 
+  const extendRoom = useCallback(async (id: string, additionalMinutes: number): Promise<boolean> => {
+    setLoading(true)
+    setError(null)
+    try {
+      // First get current room to see current expires_at
+      const { data: currentRoom, error: fetchError } = await supabase
+        .from('rooms')
+        .select('expires_at')
+        .eq('id', id)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      const newExpiresAt = addMinutes(new Date(currentRoom.expires_at), additionalMinutes).toISOString()
+
+      const { error: updateError } = await supabase
+        .from('rooms')
+        .update({ expires_at: newExpiresAt })
+        .eq('id', id)
+
+      if (updateError) throw updateError
+      
+      return true
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while extending the room.')
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   return {
     createRoom,
     joinRoomByCode,
     getRoomById,
+    extendRoom,
     loading,
     error,
     sessionId

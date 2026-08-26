@@ -148,6 +148,9 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
 
   const deleteItem = async (id: string) => {
     if (!roomId) return
+    // Optimistic delete
+    setItems((current) => current.filter(item => item.id !== id))
+    
     const { error } = await supabase
       .from('room_items')
       .delete()
@@ -156,12 +159,16 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
       
     if (error) {
       console.error('Error deleting item:', error)
+      fetchItems() // revert on error
       throw error
     }
   }
 
   const clearAllItems = async () => {
     if (!roomId) return
+    // Optimistic clear
+    setItems((current) => current.filter(item => item.session_id !== sessionId))
+    
     const { error } = await supabase
       .from('room_items')
       .delete()
@@ -170,6 +177,7 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
       
     if (error) {
       console.error('Error clearing items:', error)
+      fetchItems() // revert on error
       throw error
     }
   }

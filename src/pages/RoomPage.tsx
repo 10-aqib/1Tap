@@ -9,14 +9,14 @@ import { useToast } from '../components/ui/ToastProvider'
 import { Button } from '../components/ui/Button'
 import { MessageItem } from '../components/MessageItem'
 import { triggerBackgroundPulse } from '../components/background/LivingBackground'
-import { Moon, Sun, Copy, Share2, LogOut, Paperclip, Send, AlertCircle, Zap, MonitorSmartphone, X, Check, Download, Trash2 } from 'lucide-react'
+import { Moon, Sun, Copy, Share2, LogOut, Paperclip, Send, AlertCircle, Zap, MonitorSmartphone, X, Check, Download, Trash2, Plus } from 'lucide-react'
 
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
   const { toast } = useToast()
   
-  const { getRoomById, loading, sessionId } = useRoom()
+  const { getRoomById, extendRoom, loading, sessionId } = useRoom()
   const [room, setRoom] = useState<any>(null)
   const [showShareModal, setShowShareModal] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
@@ -100,6 +100,19 @@ export function RoomPage() {
       } catch (e) {
         toast('Failed to clear messages', 'error')
       }
+    }
+  }
+
+  const handleExtendRoom = async () => {
+    if (!room?.id) return
+    const success = await extendRoom(room.id, 15) // extend by 15 mins
+    if (success) {
+      toast('Room extended by 15 minutes', 'success')
+      // Update local state so timer updates immediately
+      const newExpiresAt = new Date(new Date(room.expires_at).getTime() + 15 * 60000).toISOString()
+      setRoom({ ...room, expires_at: newExpiresAt })
+    } else {
+      toast('Failed to extend room', 'error')
     }
   }
 
@@ -210,6 +223,13 @@ export function RoomPage() {
             }`}>
               <AlertCircle className="w-4 h-4" />
               {formattedTime} remaining
+              <button
+                onClick={handleExtendRoom}
+                className="ml-1 p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                title="Add 15 minutes"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-hover text-text-secondary text-sm font-medium">
               <span className="relative flex h-2.5 w-2.5 mr-1">
@@ -242,6 +262,13 @@ export function RoomPage() {
           <div className={`flex items-center gap-1.5 ${isCritical ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-text-secondary'}`}>
             <AlertCircle className="w-3.5 h-3.5" />
             {formattedTime}
+            <button
+              onClick={handleExtendRoom}
+              className="ml-1 p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+              title="Add 15 minutes"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
           </div>
           <div className="flex items-center gap-1.5 text-text-secondary">
             <MonitorSmartphone className="w-3.5 h-3.5" />
