@@ -1,5 +1,7 @@
 export type RoomStatus = 'active' | 'expired' | 'deleted'
 
+export type RoomType = 'private' | 'shared'
+
 export type ItemType = 'text' | 'link' | 'file'
 
 export interface Room {
@@ -9,6 +11,7 @@ export interface Room {
   expires_at: string
   last_activity_at: string
   status: RoomStatus
+  room_type?: RoomType
 }
 
 export interface RoomItemMetadata {

@@ -2,40 +2,29 @@ import { useState, useEffect } from 'react'
 import { differenceInSeconds } from 'date-fns'
 
 export const useCountdown = (expiresAt: string | undefined) => {
-  const [timeLeft, setTimeLeft] = useState<number | null>(null)
-  const [isExpired, setIsExpired] = useState(false)
+  const getInitialTimeLeft = () => {
+    if (!expiresAt) return null
+    const diff = differenceInSeconds(new Date(expiresAt), new Date())
+    return diff > 0 ? diff : 0
+  }
+
+  const [timeLeft, setTimeLeft] = useState<number | null>(getInitialTimeLeft)
+  const isExpired = timeLeft !== null && timeLeft <= 0
 
   useEffect(() => {
-    if (!expiresAt) {
-      setTimeLeft(null)
-      return
-    }
+    if (!expiresAt) return
 
-    const calculateTimeLeft = () => {
-      const now = new Date()
-      const expiry = new Date(expiresAt)
-      const diff = differenceInSeconds(expiry, now)
-      
+    const tick = () => {
+      const diff = differenceInSeconds(new Date(expiresAt), new Date())
       if (diff <= 0) {
         setTimeLeft(0)
-        setIsExpired(true)
-        return 0
+      } else {
+        setTimeLeft(diff)
       }
-      
-      setTimeLeft(diff)
-      return diff
     }
 
-    // Initial calc
-    const initialDiff = calculateTimeLeft()
-    
-    if (initialDiff > 0) {
-      const timer = setInterval(() => {
-        calculateTimeLeft()
-      }, 1000)
-      return () => clearInterval(timer)
-    }
-
+    const timer = setInterval(tick, 1000)
+    return () => clearInterval(timer)
   }, [expiresAt])
 
   const formatTime = (seconds: number | null) => {

@@ -17,12 +17,6 @@ interface PulseEvent {
   life: number
 }
 
-// Global event system for triggering background pulses
-export const triggerBackgroundPulse = (x?: number, y?: number) => {
-  const event = new CustomEvent('dropshare-bg-pulse', { detail: { x, y } })
-  window.dispatchEvent(event)
-}
-
 export function LivingBackground({ active = false }: { active?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   

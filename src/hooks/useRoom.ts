@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { supabase } from '../lib/supabase'
 import type { Room } from '../types'
-import { generateJoinCode } from '../lib/utils'
+import { generateJoinCode, generateWifiCode, getNetworkIdentifier } from '../lib/utils'
 import { addMinutes } from 'date-fns'
 
 // Store session ID in local storage
@@ -155,11 +155,83 @@ export const useRoom = () => {
     }
   }, [])
 
+  const getOrCreateSharedWifiRoom = useCallback(async (): Promise<Room | null> => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { ip } = await getNetworkIdentifier()
+      const wifiCode = generateWifiCode(ip)
+      const expiresAt = addMinutes(new Date(), 1440).toISOString() // 24h active window
+
+      // Try finding an existing room with this deterministic Wi-Fi code
+      const { data: existingRoom, error: fetchErr } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('join_code', wifiCode)
+        .maybeSingle()
+
+      if (existingRoom && !fetchErr) {
+        // If expired or expiring soon, renew it
+        if (existingRoom.status !== 'active' || new Date(existingRoom.expires_at) <= addMinutes(new Date(), 60)) {
+          const { data: updatedRoom } = await supabase
+            .from('rooms')
+            .update({
+              status: 'active',
+              expires_at: expiresAt,
+              last_activity_at: new Date().toISOString()
+            })
+            .eq('id', existingRoom.id)
+            .select()
+            .single()
+
+          if (updatedRoom) {
+            return { ...(updatedRoom as Room), room_type: 'shared' }
+          }
+        }
+        return { ...(existingRoom as Room), room_type: 'shared' }
+      }
+
+      // If not found, insert new room
+      const { data: createdRoom, error: insertErr } = await supabase
+        .from('rooms')
+        .insert({
+          join_code: wifiCode,
+          expires_at: expiresAt,
+          status: 'active'
+        })
+        .select()
+        .single()
+
+      if (insertErr) {
+        // Handle concurrent join on same Wi-Fi
+        if (insertErr.code === '23505') {
+          const { data: retryRoom } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('join_code', wifiCode)
+            .single()
+          if (retryRoom) {
+            return { ...(retryRoom as Room), room_type: 'shared' }
+          }
+        }
+        throw insertErr
+      }
+
+      return { ...(createdRoom as Room), room_type: 'shared' }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while connecting to the shared room.')
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   return {
     createRoom,
     joinRoomByCode,
     getRoomById,
     extendRoom,
+    getOrCreateSharedWifiRoom,
     loading,
     error,
     sessionId

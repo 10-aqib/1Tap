@@ -1,10 +1,12 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { RoomItem, DevicePresence } from '../types'
 
 export const useRoomRealtime = (roomId: string | undefined, sessionId: string) => {
   const [items, setItems] = useState<RoomItem[]>([])
   const [devices, setDevices] = useState<DevicePresence[]>([])
+  const channelRef = useRef<RealtimeChannel | null>(null)
 
   const fetchItems = useCallback(async () => {
     if (!roomId) return
@@ -23,11 +25,25 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
 
   useEffect(() => {
     if (!roomId) return
+    let isSubscribed = true
 
-    fetchItems()
+    // Initial load
+    const loadItems = async () => {
+      const { data, error } = await supabase
+        .from('room_items')
+        .select('*')
+        .eq('room_id', roomId)
+        .order('created_at', { ascending: true })
 
-    // Subscribe to database changes
+      if (!error && isSubscribed) {
+        setItems((data as RoomItem[]) || [])
+      }
+    }
+    loadItems()
+
+    // Subscribe to room channel for real-time Postgres changes and instant broadcast events
     const channel = supabase.channel(`room_${roomId}`)
+    channelRef.current = channel
 
     channel
       .on(
@@ -39,7 +55,13 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
           filter: `room_id=eq.${roomId}`
         },
         (payload) => {
-          setItems((current) => [...current, payload.new as RoomItem])
+          setItems((current) => {
+            const newItem = payload.new as RoomItem
+            if (current.some(item => item.id === newItem.id)) {
+              return current
+            }
+            return [...current, newItem]
+          })
         }
       )
       .on(
@@ -47,11 +69,13 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
         {
           event: 'DELETE',
           schema: 'public',
-          table: 'room_items',
-          filter: `room_id=eq.${roomId}`
+          table: 'room_items'
         },
         (payload) => {
-          setItems((current) => current.filter(item => item.id !== payload.old.id))
+          const deletedId = payload.old?.id
+          if (deletedId) {
+            setItems((current) => current.filter(item => item.id !== deletedId))
+          }
         }
       )
       .on(
@@ -66,6 +90,19 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
           setItems((current) => current.map(item => item.id === payload.new.id ? payload.new as RoomItem : item))
         }
       )
+      // Instant peer broadcast listeners for zero-latency UI updates
+      .on('broadcast', { event: 'item_deleted' }, (payload) => {
+        const deletedId = payload?.payload?.id
+        if (deletedId) {
+          setItems((current) => current.filter(item => item.id !== deletedId))
+        }
+      })
+      .on('broadcast', { event: 'room_cleared' }, (payload) => {
+        const clearSession = payload?.payload?.sessionId
+        if (clearSession) {
+          setItems((current) => current.filter(item => item.session_id !== clearSession))
+        }
+      })
 
     // Setup presence
     channel
@@ -87,12 +124,6 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
         
         setDevices(activeDevices)
       })
-      .on('presence', { event: 'join' }, () => {
-        // Handled by sync
-      })
-      .on('presence', { event: 'leave' }, () => {
-        // Handled by sync
-      })
 
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
@@ -104,9 +135,11 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
     })
 
     return () => {
+      isSubscribed = false
+      channelRef.current = null
       supabase.removeChannel(channel)
     }
-  }, [roomId, sessionId, fetchItems])
+  }, [roomId, sessionId])
 
   const sendItem = async (type: 'text' | 'link' | 'file', content: string, metadata: any = null) => {
     if (!roomId) return
@@ -138,7 +171,7 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
       .from('room_items')
       .update({ content: newContent })
       .eq('id', id)
-      .eq('session_id', sessionId) // extra safety check
+      .eq('session_id', sessionId)
     
     if (error) {
       console.error('Error updating item:', error)
@@ -148,14 +181,39 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
 
   const deleteItem = async (id: string) => {
     if (!roomId) return
-    // Optimistic delete
+
+    // Find the item to check if it's a file
+    const targetItem = items.find(item => item.id === id)
+
+    // 1. Optimistic removal locally
     setItems((current) => current.filter(item => item.id !== id))
-    
+
+    // 2. Instant broadcast to all connected peer devices in this room
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'item_deleted',
+        payload: { id }
+      }).catch(() => {
+        // Broadcast error ignored
+      })
+    }
+
+    // 3. If file, delete from Supabase storage as well
+    if (targetItem?.type === 'file' && targetItem.metadata?.storage_path) {
+      supabase.storage
+        .from('room_files')
+        .remove([targetItem.metadata.storage_path])
+        .catch((storageErr) => {
+          console.warn('Could not delete storage file:', storageErr)
+        })
+    }
+
+    // 4. Delete record from database
     const { error } = await supabase
       .from('room_items')
       .delete()
       .eq('id', id)
-      .eq('session_id', sessionId)
       
     if (error) {
       console.error('Error deleting item:', error)
@@ -166,8 +224,18 @@ export const useRoomRealtime = (roomId: string | undefined, sessionId: string) =
 
   const clearAllItems = async () => {
     if (!roomId) return
+    
     // Optimistic clear
     setItems((current) => current.filter(item => item.session_id !== sessionId))
+
+    // Broadcast clear to peers
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'room_cleared',
+        payload: { sessionId }
+      }).catch(() => {})
+    }
     
     const { error } = await supabase
       .from('room_items')

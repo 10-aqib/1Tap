@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { useRoom } from '../hooks/useRoom'
 import { useRoomRealtime } from '../hooks/useRoomRealtime'
 import { useFileUpload } from '../hooks/useFileUpload'
 import { useCountdown } from '../hooks/useCountdown'
-import { useToast } from '../components/ui/ToastProvider'
+import { useToast } from '../contexts/ToastContext'
 import { Button } from '../components/ui/Button'
 import { MessageItem } from '../components/MessageItem'
-import { triggerBackgroundPulse } from '../components/background/LivingBackground'
-import { Moon, Sun, Copy, Share2, LogOut, Paperclip, Send, AlertCircle, Zap, MonitorSmartphone, X, Check, Download, Trash2, Plus } from 'lucide-react'
+import { triggerBackgroundPulse } from '../lib/events'
+import { Moon, Sun, Copy, Share2, LogOut, Paperclip, Send, AlertCircle, Zap, MonitorSmartphone, X, Check, Download, Trash2, Plus, Wifi, Lock } from 'lucide-react'
 
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { toast } = useToast()
   
@@ -21,6 +22,8 @@ export function RoomPage() {
   const [showShareModal, setShowShareModal] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
+  
+  const isShared = searchParams.get('type') === 'shared' || room?.room_type === 'shared'
   
   const { items, devices, sendItem, updateItem, deleteItem, clearAllItems } = useRoomRealtime(room?.id, sessionId)
   const [textInput, setTextInput] = useState('')
@@ -93,11 +96,11 @@ export function RoomPage() {
   }
 
   const handleClearAll = async () => {
-    if (confirm('Are you sure you want to clear all messages you sent in this space?')) {
+    if (confirm('Are you sure you want to clear your messages in this space?')) {
       try {
         await clearAllItems()
         toast('Your messages were cleared', 'success')
-      } catch (e) {
+      } catch {
         toast('Failed to clear messages', 'error')
       }
     }
@@ -108,7 +111,6 @@ export function RoomPage() {
     const success = await extendRoom(room.id, 15) // extend by 15 mins
     if (success) {
       toast('Room extended by 15 minutes', 'success')
-      // Update local state so timer updates immediately
       const newExpiresAt = new Date(new Date(room.expires_at).getTime() + 15 * 60000).toISOString()
       setRoom({ ...room, expires_at: newExpiresAt })
     } else {
@@ -195,23 +197,44 @@ export function RoomPage() {
       <header className="sticky top-0 z-30 bg-bg/80 backdrop-blur-md border-b border-surface-border">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
           
-          {/* Logo & Code */}
-          <div className="flex items-center gap-4 sm:gap-6">
-            <div className="hidden sm:flex items-center gap-2 font-bold text-lg tracking-tight cursor-pointer" onClick={() => navigate('/')}>
+          {/* Logo & Mode Indicator */}
+          <div className="flex items-center gap-3 sm:gap-6">
+            <div className="flex items-center gap-2 font-bold text-lg tracking-tight cursor-pointer" onClick={() => navigate('/')}>
               <div className="w-7 h-7 rounded-lg bg-accent-600 flex items-center justify-center text-white">
                 <Zap className="w-4 h-4 fill-white" />
               </div>
-              1Tap
+              <span className="hidden sm:inline">1Tap</span>
             </div>
-            <button 
-              onClick={handleCopyCode}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-hover hover:bg-surface-border transition-colors group"
-            >
-              <span className="font-mono font-bold text-lg tracking-widest text-text-primary">
-                {room.join_code.slice(0, 3)} {room.join_code.slice(3)}
-              </span>
-              {codeCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-text-muted group-hover:text-text-primary transition-colors" />}
-            </button>
+
+            {isShared ? (
+              /* Shared Room Badge */
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/20 text-accent-700 dark:text-accent-300">
+                <Wifi className="w-4 h-4 text-accent-600 dark:text-accent-400" />
+                <span className="font-semibold text-xs sm:text-sm">Shared Wi-Fi Space</span>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+              </div>
+            ) : (
+              /* Private Room Code Pill */
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-1.5 text-xs text-text-muted font-medium bg-surface-hover px-2 py-1 rounded-md">
+                  <Lock className="w-3 h-3 text-accent-600" />
+                  <span>Private</span>
+                </div>
+                <button 
+                  onClick={handleCopyCode}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-hover hover:bg-surface-border transition-colors group"
+                  title="Click to copy code"
+                >
+                  <span className="font-mono font-bold text-base sm:text-lg tracking-widest text-text-primary">
+                    {room.join_code.slice(0, 3)} {room.join_code.slice(3)}
+                  </span>
+                  {codeCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-text-muted group-hover:text-text-primary transition-colors" />}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Center: Timer & Status */}
@@ -245,9 +268,11 @@ export function RoomPage() {
             <Button variant="ghost" size="icon" onClick={handleClearAll} title="Clear My Messages" className="text-text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30">
               <Trash2 className="w-5 h-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setShowShareModal(true)} title="Share Room">
-              <Share2 className="w-5 h-5" />
-            </Button>
+            {!isShared && (
+              <Button variant="ghost" size="icon" onClick={() => setShowShareModal(true)} title="Share Room Code / QR">
+                <Share2 className="w-5 h-5" />
+              </Button>
+            )}
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="hidden sm:flex">
               {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </Button>
@@ -256,6 +281,14 @@ export function RoomPage() {
             </Button>
           </div>
         </div>
+
+        {/* Informative Banner for Shared Wi-Fi */}
+        {isShared && (
+          <div className="bg-accent-500/10 border-t border-b border-accent-500/20 px-4 py-2 text-center text-xs text-text-secondary flex items-center justify-center gap-2">
+            <Wifi className="w-3.5 h-3.5 text-accent-600 shrink-0" />
+            <span><strong>Same Wi-Fi Space Active:</strong> Any device on your local Wi-Fi connects here automatically without codes or QR!</span>
+          </div>
+        )}
         
         {/* Mobile Timer Bar */}
         <div className="md:hidden flex items-center justify-between px-4 py-2 border-t border-surface-border bg-surface-muted text-xs font-medium">
@@ -292,7 +325,10 @@ export function RoomPage() {
               </div>
               <h3 className="text-xl font-semibold text-text-primary mb-2">Nothing here yet</h3>
               <p className="text-text-secondary max-w-sm">
-                Drop a file anywhere, paste a link, or type a message below to instantly share it with connected devices.
+                {isShared 
+                  ? "Drop a file anywhere or type a message below. Any device on your Wi-Fi will see it instantly!"
+                  : "Drop a file anywhere, paste a link, or type a message below to share with anyone who has the code."
+                }
               </p>
             </div>
           ) : (
@@ -337,7 +373,7 @@ export function RoomPage() {
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message, paste a link..."
+            placeholder={isShared ? "Type a message or paste a link for devices on your Wi-Fi..." : "Type a message, paste a link..."}
             className="w-full bg-transparent resize-none outline-none text-text-primary placeholder:text-text-muted p-2 max-h-32 min-h-[44px]"
             rows={1}
             style={{ height: textInput ? 'auto' : '44px' }}
@@ -373,8 +409,8 @@ export function RoomPage() {
         </div>
       </main>
 
-      {/* Share Modal */}
-      {showShareModal && (
+      {/* Share Modal for Private Rooms */}
+      {showShareModal && !isShared && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-surface rounded-3xl p-6 sm:p-8 shadow-2xl border border-surface-border max-w-sm w-full relative animate-in zoom-in-95 duration-200">
             <button 

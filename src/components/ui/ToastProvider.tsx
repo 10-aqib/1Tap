@@ -1,23 +1,12 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/utils'
+import { ToastContext } from '../../contexts/ToastContext'
 
 interface ToastItem {
   id: string
   message: string
   type: 'success' | 'error' | 'info'
-}
-
-interface ToastContextType {
-  toast: (message: string, type?: 'success' | 'error' | 'info') => void
-}
-
-const ToastContext = createContext<ToastContextType | undefined>(undefined)
-
-export const useToast = () => {
-  const context = useContext(ToastContext)
-  if (!context) throw new Error('useToast must be used within ToastProvider')
-  return context
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -34,12 +23,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
         {toasts.map(t => (
           <div
             key={t.id}
             className={cn(
-              "px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-in slide-in-from-bottom-5",
+              "px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-in slide-in-from-bottom-5 pointer-events-auto",
               t.type === 'success' ? 'bg-green-500 text-white' :
               t.type === 'error' ? 'bg-red-500 text-white' :
               'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900'

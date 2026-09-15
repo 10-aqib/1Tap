@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { FileText, Download, Link2, Copy, Check, Edit2, Trash2, X } from 'lucide-react'
 import type { RoomItem } from '../types'
 import { formatBytes } from '../lib/utils'
-import { useToast } from './ui/ToastProvider'
+import { useToast } from '../contexts/ToastContext'
 
 interface MessageItemProps {
   item: RoomItem
@@ -29,8 +29,8 @@ export function MessageItem({ item, isOwn, onUpdate, onDelete }: MessageItemProp
     if (onDelete) {
       try {
         await onDelete(item.id)
-        toast('Message deleted', 'success')
-      } catch (e) {
+        toast(item.type === 'file' ? 'File removed' : 'Message removed', 'success')
+      } catch {
         toast('Failed to delete', 'error')
       }
     }
@@ -47,7 +47,7 @@ export function MessageItem({ item, isOwn, onUpdate, onDelete }: MessageItemProp
         await onUpdate(item.id, editContent)
         setIsEditing(false)
         toast('Message updated', 'success')
-      } catch (e) {
+      } catch {
         toast('Failed to update', 'error')
       } finally {
         setIsSaving(false)
@@ -67,7 +67,7 @@ export function MessageItem({ item, isOwn, onUpdate, onDelete }: MessageItemProp
       {item.type === 'text' && (
         <button
           onClick={() => setIsEditing(true)}
-          className={`hover:opacity-100 transition-opacity flex items-center justify-center w-6 h-6 rounded-md text-accent-100 hover:text-white hover:bg-accent-500/50`}
+          className="hover:opacity-100 transition-opacity flex items-center justify-center w-6 h-6 rounded-md text-accent-100 hover:text-white hover:bg-accent-500/50"
           title="Edit message"
         >
           <Edit2 className="w-3.5 h-3.5" />
@@ -89,8 +89,8 @@ export function MessageItem({ item, isOwn, onUpdate, onDelete }: MessageItemProp
 
   if (item.type === 'file' && item.metadata) {
     return (
-      <div className={`flex w-full group ${isOwn ? 'justify-end' : 'justify-start'} animate-slide-up-fade`}>
-        <div className={`max-w-[85%] sm:max-w-[400px] rounded-2xl p-4 flex flex-col gap-2 border shadow-sm ${
+      <div className={`flex w-full group ${isOwn ? 'justify-end' : 'justify-start'} animate-slide-up-fade transition-all duration-200`}>
+        <div className={`max-w-[85%] sm:max-w-[420px] rounded-2xl p-4 flex flex-col gap-2 border shadow-sm ${
           isOwn ? 'bg-accent-50 border-accent-100 dark:bg-accent-500/10 dark:border-accent-500/20' : 'bg-surface border-surface-border'
         }`}>
           <div className="flex items-center gap-4">
@@ -105,16 +105,26 @@ export function MessageItem({ item, isOwn, onUpdate, onDelete }: MessageItemProp
                 {formatBytes(item.metadata.size || 0)} • {timeString}
               </p>
             </div>
-            <a
-              href={`${item.content}?download=`}
-              download={item.metadata.name}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-hover hover:bg-surface-border text-text-secondary transition-colors"
-              title="Download file"
-            >
-              <Download className="w-4 h-4" />
-            </a>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <a
+                href={`${item.content}?download=`}
+                download={item.metadata.name}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-hover hover:bg-surface-border text-text-secondary transition-colors"
+                title="Download file"
+              >
+                <Download className="w-4 h-4" />
+              </a>
+              {onDelete && (
+                <button
+                  onClick={handleDelete}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-hover hover:bg-red-500/10 text-text-muted hover:text-red-500 transition-colors"
+                  title="Delete file instantly"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
-          {isOwn && <div className="flex justify-end">{actionButtons}</div>}
         </div>
       </div>
     )
@@ -124,10 +134,12 @@ export function MessageItem({ item, isOwn, onUpdate, onDelete }: MessageItemProp
     let domain = item.content
     try {
       domain = new URL(item.content).hostname
-    } catch (e) {}
+    } catch {
+      // Ignored invalid URL
+    }
 
     return (
-      <div className={`flex w-full group ${isOwn ? 'justify-end' : 'justify-start'} animate-slide-up-fade`}>
+      <div className={`flex w-full group ${isOwn ? 'justify-end' : 'justify-start'} animate-slide-up-fade transition-all duration-200`}>
         <div className={`max-w-[85%] sm:max-w-[400px] rounded-2xl p-4 flex flex-col gap-3 border shadow-sm ${
           isOwn ? 'bg-accent-50 border-accent-100 dark:bg-accent-500/10 dark:border-accent-500/20' : 'bg-surface border-surface-border'
         }`}>
@@ -167,7 +179,7 @@ export function MessageItem({ item, isOwn, onUpdate, onDelete }: MessageItemProp
 
   // Text
   return (
-    <div className={`flex w-full group ${isOwn ? 'justify-end' : 'justify-start'} animate-slide-up-fade`}>
+    <div className={`flex w-full group ${isOwn ? 'justify-end' : 'justify-start'} animate-slide-up-fade transition-all duration-200`}>
       <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-3 shadow-sm ${
         isOwn ? 'bg-accent-600 text-white rounded-br-sm' : 'bg-surface border border-surface-border text-text-primary rounded-bl-sm'
       }`}>

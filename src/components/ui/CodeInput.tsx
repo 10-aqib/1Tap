@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react'
 import type { KeyboardEvent, ClipboardEvent } from 'react'
-import { cn } from './Button'
+import { cn } from '../../lib/utils'
 
 interface CodeInputProps {
   length?: number
